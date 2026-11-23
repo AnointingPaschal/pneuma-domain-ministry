@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 /*
   Pneuma Domain Ministry — single-page church website.
+  Logo: public/logo.png (the real PDM logo, transparent PNG).
+  Palette sampled from the logo: blue #2D72B7, flame red #E21D24,
+  swoosh gold #F5C400, deep navy #0F2A44 / #123A63, ivory #FDF8F0.
   Placeholder details (to be confirmed with the ministry — not shown as
   "placeholder" text on the page, only noted here):
   - Service times: Sundays 9:00am & 11:30am, Wednesdays 6:00pm prayer.
@@ -61,23 +64,105 @@ const EVENTS = [
   { day: '18', month: 'Jan', year: '2027', title: 'Baptism Sunday', time: '11:30 AM Service', place: 'Grace Chapel', desc: 'Celebrating new life in Christ as believers are baptised.' },
 ]
 
+/* Count up when the stat scrolls into view. */
+function AnimatedNumber({ end, suffix }) {
+  const ref = useRef(null)
+  const [value, setValue] = useState(0)
+  const started = useRef(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !started.current) {
+          started.current = true
+          const start = performance.now()
+          const duration = 1400
+          const tick = (now) => {
+            const p = Math.min(1, (now - start) / duration)
+            const eased = 1 - Math.pow(1 - p, 3)
+            setValue(Math.round(end * eased))
+            if (p < 1) requestAnimationFrame(tick)
+          }
+          requestAnimationFrame(tick)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.5 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [end])
+  return (
+    <strong ref={ref}>
+      {value}
+      {suffix}
+    </strong>
+  )
+}
+
 function App() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const [heroY, setHeroY] = useState(0)
   const [form, setForm] = useState({ name: '', email: '', message: '' })
   const [submitted, setSubmitted] = useState(false)
+
+  /* Navbar state + gentle hero parallax, throttled with requestAnimationFrame. */
+  useEffect(() => {
+    let ticking = false
+    const onScroll = () => {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        setScrolled(window.scrollY > 24)
+        setHeroY(window.scrollY)
+        ticking = false
+      })
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  /* Scroll-reveal: add .revealed to every .reveal element as it enters view. */
+  useEffect(() => {
+    const els = document.querySelectorAll('.reveal')
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('revealed')
+            observer.unobserve(entry.target)
+          }
+        })
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' },
+    )
+    els.forEach((el) => observer.observe(el))
+    return () => observer.disconnect()
+  }, [])
 
   const handleSubmit = (e) => {
     e.preventDefault()
     setSubmitted(true)
   }
 
+  const tickerItems = [
+    'Healing', 'Hope', 'Grace', 'Psalm 147:3', 'Night of Grace — Dec 6',
+    'Sundays 9:00 & 11:30 AM', 'Welcome Home',
+  ]
+  const ticker = [...tickerItems, ...tickerItems]
+
   return (
     <div className="site">
       {/* 1. Sticky navbar */}
-      <header className="nav">
+      <header className={`nav ${scrolled ? 'scrolled' : ''}`}>
         <div className="container nav-inner">
           <a className="brand" href="#home" aria-label="Pneuma Domain Ministry — home">
-            <span className="brand-mark" aria-hidden="true">✦</span>
+            <span className="brand-logo">
+              <img src="/logo.png" alt="Pneuma Domain Ministry logo" height="48" width="48" />
+            </span>
             <span className="brand-text">
               <strong>Pneuma Domain</strong>
               <small>MINISTRY</small>
@@ -99,29 +184,52 @@ function App() {
             <a className="btn btn-gold btn-sm" href="#visit" onClick={() => setMenuOpen(false)}>Plan Your Visit</a>
           </nav>
         </div>
+        <span className="nav-swoosh" aria-hidden="true" />
       </header>
 
       <main>
         {/* 2. Hero */}
-        <section id="home" className="hero" style={{ backgroundImage: `url(${IMAGES.hero})` }}>
-          <div className="hero-overlay" />
-          <div className="container hero-content">
-            <p className="eyebrow eyebrow-light">✦ &nbsp;Pneuma Domain Ministry&nbsp; ✦</p>
-            <h1>A Place of Healing,<br />Hope &amp; Grace</h1>
-            <p className="hero-sub">
+        <section id="home" className="hero">
+          <div className="hero-bg" style={{ backgroundImage: `url(${IMAGES.hero})` }} aria-hidden="true" />
+          <div className="hero-overlay" aria-hidden="true" />
+          <span className="flame-dot flame-dot-1" aria-hidden="true" />
+          <span className="flame-dot flame-dot-2" aria-hidden="true" />
+          <span className="flame-dot flame-dot-3" aria-hidden="true" />
+          <div
+            className="container hero-content"
+            style={{ transform: `translateY(${Math.min(heroY * 0.18, 90)}px)`, opacity: Math.max(0, 1 - heroY / 700) }}
+          >
+            <p className="eyebrow eyebrow-light hero-anim" style={{ animationDelay: '0.05s' }}>
+              <span className="flame" aria-hidden="true">🔥</span>
+              &nbsp;Pneuma Domain Ministry&nbsp;
+              <span className="flame" aria-hidden="true">🔥</span>
+            </p>
+            <h1>
+              <span className="hero-word hero-anim" style={{ animationDelay: '0.15s' }}>A Place of</span>{' '}
+              <span className="hero-word hero-word-gold hero-anim" style={{ animationDelay: '0.3s' }}>Healing,</span>
+              <br />
+              <span className="hero-word hero-anim" style={{ animationDelay: '0.45s' }}>Hope &amp;</span>{' '}
+              <span className="hero-word hero-word-gold hero-anim" style={{ animationDelay: '0.6s' }}>Grace</span>
+            </h1>
+            <p className="hero-sub hero-anim" style={{ animationDelay: '0.75s' }}>
               Come as you are. Leave renewed. Join a family of faith where
               broken hearts are healed, hope is restored, and grace abounds.
             </p>
-            <div className="hero-cta">
+            <div className="hero-cta hero-anim" style={{ animationDelay: '0.9s' }}>
               <a className="btn btn-gold" href="#visit">Join Us This Sunday</a>
               <a className="btn btn-outline-light" href="#night-of-grace">Watch Night of Grace</a>
             </div>
-            <div className="hero-chips" aria-label="Service times">
+            <div className="hero-chips hero-anim" style={{ animationDelay: '1.05s' }} aria-label="Service times">
               <span>Sundays · 9:00 AM</span>
               <span>Sundays · 11:30 AM</span>
               <span>Wednesdays · 6:00 PM Prayer</span>
             </div>
           </div>
+          {/* Gold swoosh divider, echoing the logo's swoosh */}
+          <svg className="hero-swoosh" viewBox="0 0 1440 90" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0,40 C360,90 720,0 1080,35 C1260,52 1380,45 1440,30 L1440,90 L0,90 Z" fill="#F5C400" />
+            <path d="M0,55 C360,100 720,20 1080,50 C1260,65 1380,58 1440,45 L1440,90 L0,90 Z" fill="#FDF8F0" />
+          </svg>
           <div className="scripture-strip">
             <div className="container">
               <p>“He heals the brokenhearted and binds up their wounds.” <span>— Psalm 147:3</span></p>
@@ -129,14 +237,26 @@ function App() {
           </div>
         </section>
 
+        {/* Ticker — welcome words, decorative repetition of on-page text */}
+        <div className="ticker" aria-hidden="true">
+          <div className="ticker-track">
+            {ticker.map((item, i) => (
+              <span key={i} className="ticker-item">
+                {item} <i>✦</i>
+              </span>
+            ))}
+          </div>
+        </div>
+
         {/* 3. Welcome / About */}
         <section id="about" className="section">
           <div className="container about-grid">
-            <div className="about-images">
+            <div className="about-images reveal">
               <img src={IMAGES.interior} alt="Inside Grace Chapel during worship" loading="lazy" />
               <img className="about-img-small" src={IMAGES.community} alt="Members of the Pneuma Domain Ministry community together" loading="lazy" />
+              <span className="about-badge" aria-hidden="true">Est. in grace</span>
             </div>
-            <div>
+            <div className="reveal">
               <p className="eyebrow">Welcome Home</p>
               <h2>Welcome to Pneuma Domain Ministry</h2>
               <p>
@@ -158,9 +278,9 @@ function App() {
                 <div className="value-card"><span aria-hidden="true">◍</span><h3>Community</h3><p>A family that walks together.</p></div>
               </div>
               <div className="stats" aria-label="Ministry at a glance">
-                <div><strong>12+</strong><span>Years of ministry</span></div>
-                <div><strong>500+</strong><span>Families</span></div>
-                <div><strong>40+</strong><span>Ministries &amp; groups</span></div>
+                <div><AnimatedNumber end={12} suffix="+" /><span>Years of ministry</span></div>
+                <div><AnimatedNumber end={500} suffix="+" /><span>Families</span></div>
+                <div><AnimatedNumber end={40} suffix="+" /><span>Ministries &amp; groups</span></div>
               </div>
             </div>
           </div>
@@ -169,27 +289,27 @@ function App() {
         {/* 4. Service times */}
         <section id="services" className="section section-soft">
           <div className="container">
-            <div className="section-head">
+            <div className="section-head reveal">
               <p className="eyebrow">Join Us</p>
               <h2>Service Times</h2>
               <p>Come early, stay for coffee, and bring the whole family.</p>
             </div>
             <div className="grid-3">
-              <article className="card service-card">
+              <article className="card service-card reveal">
                 <p className="card-eyebrow">Sunday</p>
                 <h3>Sunday Celebration</h3>
                 <p className="big-time">9:00 AM</p>
                 <p>Worship, the Word and prayer — our first celebration of the day at Grace Chapel.</p>
                 <a href="#visit">Plan your visit →</a>
               </article>
-              <article className="card service-card featured">
+              <article className="card service-card featured reveal">
                 <p className="card-eyebrow">Sunday</p>
                 <h3>Sunday Celebration</h3>
                 <p className="big-time">11:30 AM</p>
                 <p>Our main family service, with Kids Church and a warm welcome for newcomers.</p>
                 <a href="#visit">Plan your visit →</a>
               </article>
-              <article className="card service-card">
+              <article className="card service-card reveal">
                 <p className="card-eyebrow">Wednesday</p>
                 <h3>Midweek Prayer</h3>
                 <p className="big-time">6:00 PM</p>
@@ -203,13 +323,14 @@ function App() {
         {/* 5. Night of Grace */}
         <section id="night-of-grace" className="section">
           <div className="container">
-            <article className="event-feature">
+            <article className="event-feature reveal">
               <div className="event-feature-img">
                 <img src={IMAGES.prayer} alt="A moment of prayer during worship" loading="lazy" />
                 <span className="event-badge">Featured Event</span>
+                <span className="flame-badge" aria-hidden="true">🔥</span>
               </div>
               <div className="event-feature-body">
-                <p className="eyebrow">An Evening of Healing, Hope &amp; Grace</p>
+                <p className="eyebrow eyebrow-red">An Evening of Healing, Hope &amp; Grace</p>
                 <h2>Night of Grace</h2>
                 <p className="event-date">Sunday, December 6 &nbsp;·&nbsp; 6:00–9:00 PM &nbsp;·&nbsp; Grace Chapel</p>
                 <p>
@@ -224,7 +345,7 @@ function App() {
                   <li>Open to all — no ticket needed, seats are free</li>
                 </ul>
                 <div className="hero-cta">
-                  <a className="btn btn-gold" href="mailto:hello@pneumadomain.org?subject=Reserve%20a%20seat%20—%20Night%20of%20Grace">Reserve a Seat</a>
+                  <a className="btn btn-flame" href="mailto:hello@pneumadomain.org?subject=Reserve%20a%20seat%20—%20Night%20of%20Grace">Reserve a Seat</a>
                   <a className="btn btn-outline" href="#events">See all events</a>
                 </div>
               </div>
@@ -235,15 +356,17 @@ function App() {
         {/* 6. Ministries */}
         <section id="ministries" className="section section-soft">
           <div className="container">
-            <div className="section-head">
+            <div className="section-head reveal">
               <p className="eyebrow">Find Your Place</p>
               <h2>Ministries for Every Season</h2>
               <p>There is a place for you to belong — and a place for you to serve.</p>
             </div>
             <div className="grid-3 ministries-grid">
               {MINISTRIES.map((m) => (
-                <article className="card ministry-card" key={m.name}>
-                  <img src={m.img} alt="" loading="lazy" />
+                <article className="card ministry-card reveal" key={m.name}>
+                  <div className="ministry-img">
+                    <img src={m.img} alt="" loading="lazy" />
+                  </div>
                   <div className="ministry-body">
                     <span className="ministry-icon" aria-hidden="true">{m.icon}</span>
                     <h3>{m.name}</h3>
@@ -258,14 +381,14 @@ function App() {
         {/* 7. Latest sermons */}
         <section id="sermons" className="section">
           <div className="container">
-            <div className="section-head">
+            <div className="section-head reveal">
               <p className="eyebrow">The Word</p>
               <h2>Latest Sermons</h2>
               <p>Listen again, or catch up on a message you missed.</p>
             </div>
             <div className="grid-3">
               {SERMONS.map((s) => (
-                <article className="card sermon-card" key={s.title}>
+                <article className="card sermon-card reveal" key={s.title}>
                   <div className="sermon-img">
                     <img src={s.img} alt="" loading="lazy" />
                     <span className="sermon-tag">{s.tag}</span>
@@ -285,14 +408,14 @@ function App() {
         {/* 8. Upcoming events */}
         <section id="events" className="section section-soft">
           <div className="container">
-            <div className="section-head">
+            <div className="section-head reveal">
               <p className="eyebrow">What’s Coming Up</p>
               <h2>Upcoming Events</h2>
               <p>Mark your calendar — we would love to see you there.</p>
             </div>
             <ul className="events-list">
               {EVENTS.map((e) => (
-                <li className="event-row" key={e.title}>
+                <li className="event-row reveal" key={e.title}>
                   <div className="event-date-box"><strong>{e.day}</strong><span>{e.month} {e.year}</span></div>
                   <div className="event-info">
                     <h3>{e.title}</h3>
@@ -309,7 +432,7 @@ function App() {
         {/* 9. Giving */}
         <section id="give" className="section give-section">
           <div className="container">
-            <div className="section-head">
+            <div className="section-head reveal">
               <p className="eyebrow eyebrow-light">Generosity</p>
               <h2 className="light-heading">Give with a Cheerful Heart</h2>
               <p className="light-text">
@@ -319,11 +442,11 @@ function App() {
               </p>
             </div>
             <div className="grid-3">
-              <article className="card give-card"><span aria-hidden="true">✦</span><h3>Tithes</h3><p>Faithful, regular giving that sustains the ministry week by week.</p></article>
-              <article className="card give-card"><span aria-hidden="true">♥</span><h3>Offerings</h3><p>Special gifts for outreach, missions and one-off needs as they arise.</p></article>
-              <article className="card give-card"><span aria-hidden="true">◍</span><h3>Building &amp; Care</h3><p>Supporting Grace Chapel and practical care for families in need.</p></article>
+              <article className="card give-card reveal"><span aria-hidden="true">✦</span><h3>Tithes</h3><p>Faithful, regular giving that sustains the ministry week by week.</p></article>
+              <article className="card give-card reveal"><span aria-hidden="true">♥</span><h3>Offerings</h3><p>Special gifts for outreach, missions and one-off needs as they arise.</p></article>
+              <article className="card give-card reveal"><span aria-hidden="true">◍</span><h3>Building &amp; Care</h3><p>Supporting Grace Chapel and practical care for families in need.</p></article>
             </div>
-            <div className="give-cta">
+            <div className="give-cta reveal">
               <a className="btn btn-gold btn-lg" href="mailto:hello@pneumadomain.org?subject=Giving%20—%20Pneuma%20Domain%20Ministry">Give Today</a>
               <p>To give by bank transfer or in person on Sunday, please contact us — details on request.</p>
             </div>
@@ -333,7 +456,7 @@ function App() {
         {/* 10. Plan Your Visit / Contact */}
         <section id="visit" className="section">
           <div className="container visit-grid">
-            <div>
+            <div className="reveal">
               <p className="eyebrow">Plan Your Visit</p>
               <h2>We Can’t Wait to Meet You</h2>
               <p>
@@ -347,7 +470,7 @@ function App() {
                 <li><strong>Wednesdays</strong><span>6:00 PM Prayer</span></li>
               </ul>
             </div>
-            <div id="contact" className="form-card">
+            <div id="contact" className="form-card reveal">
               {submitted ? (
                 <div className="thank-you" role="status">
                   <span className="thank-you-mark" aria-hidden="true">✦</span>
@@ -388,7 +511,12 @@ function App() {
       <footer className="footer">
         <div className="container footer-grid">
           <div>
-            <p className="brand footer-brand"><span className="brand-mark" aria-hidden="true">✦</span><span className="brand-text"><strong>Pneuma Domain</strong><small>MINISTRY</small></span></p>
+            <p className="brand footer-brand">
+              <span className="brand-logo brand-logo-light">
+                <img src="/logo.png" alt="Pneuma Domain Ministry logo" height="72" width="72" />
+              </span>
+              <span className="brand-text"><strong>Pneuma Domain</strong><small>MINISTRY</small></span>
+            </p>
             <p className="footer-scripture">“He heals the brokenhearted and binds up their wounds.” — Psalm 147:3</p>
             <p>A place of healing, hope &amp; grace.</p>
           </div>
